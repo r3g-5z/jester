@@ -327,8 +327,8 @@ proc handleFileRequest(
 
   # Verify that this isn't outside our static dir.
   var status = Http400
-  let pathDir = path.splitFile.dir & (if path.splitFile.dir[^1] == DirSep: "" else: $DirSep)
-  let staticDir = jes.settings.staticDir & (if jes.settings.staticDir[^1] == DirSep: "" else: $DirSep)
+  let pathDir = path.splitFile.dir / ""
+  let staticDir = jes.settings.staticDir / ""
   if pathDir.startsWith(staticDir):
     if existsDir(path):
       status = await sendStaticIfExists(
@@ -357,18 +357,17 @@ proc handleRequestSlow(
   var respData: ResponseData
 
   # httpReq.send(Http200, "Hello, World!", "")
-  when respDataFut is Future[ResponseData]:
-    yield respDataFut
-    if respDataFut.failed:
-      # Handle any errors by showing them in the browser.
-      # TODO: Improve the look of this.
-      let exc = respDataFut.readError()
-      respData = await dispatchError(jes, req, initRouteError(exc))
-      dispatchedError = true
+  try:
+    when respDataFut is Future[ResponseData]:
+      respData = await respDataFut
     else:
-      respData = respDataFut.read()
-  else:
-    respData = respDataFut
+      respData = respDataFut
+  except:
+    # Handle any errors by showing them in the browser.
+    # TODO: Improve the look of this.
+    let exc = getCurrentException()
+    respData = await dispatchError(jes, req, initRouteError(exc))
+    dispatchedError = true
 
   # TODO: Put this in a custom matcher?
   if not respData.matched:

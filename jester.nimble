@@ -13,8 +13,10 @@ skipDirs = @["tests"]
 requires "nim >= 1.0.0"
 
 when not defined(windows):
-  requires "httpbeast >= 0.4.0"
+  requires "httpbeast >= 0.3.0"
+
+# For tests
+requires "https://github.com/timotheecour/asynctools#pr_fix_compilation"
 
 task test, "Runs the test suite.":
-  exec "nimble install -y asynctools@#0e6bdc3ed5bae8c7cc9"
-  exec "nim c -r tests/tester"
+  exec "nimble c -y -r tests/tester"

@@ -11,20 +11,12 @@ const
 var serverProcess: AsyncProcess
 
 proc readLoop(process: AsyncProcess) {.async.} =
-  var wholebuf: string
-  while true:
+  while process.running:
     var buf = newString(256)
     let len = await readInto(process.outputHandle, addr buf[0], 256)
-    if len == 0:
-      break
     buf.setLen(len)
-    wholebuf.add(buf)
-    while "\l" in wholebuf:
-      let parts = wholebuf.split("\l", 1)
-      styledEcho(fgBlue, "Process: ", resetStyle, parts[0])
-      wholebuf = parts[1]
-  if wholebuf != "":
-    styledEcho(fgBlue, "Process: ", resetStyle, wholebuf)
+    styledEcho(fgBlue, "Process: ", resetStyle, buf.strip())
+
   styledEcho(fgRed, "Process terminated")
 
 proc startServer(file: string, useStdLib: bool) {.async.} =
@@ -48,10 +40,10 @@ proc startServer(file: string, useStdLib: bool) {.async.} =
   asyncCheck readLoop(serverProcess)
 
   # Wait until server responds:
-  await sleepAsync(10) # give it a chance to start
+
   for i in 0..10:
     var client = newAsyncHttpClient()
-    styledEcho(fgBlue, "Getting ", address, " - attempt " & $i)
+    styledEcho(fgBlue, "Getting ", address)
     let fut = client.get(address)
     yield fut or sleepAsync(3000)
     if not fut.finished:
@@ -61,8 +53,6 @@ proc startServer(file: string, useStdLib: bool) {.async.} =
       return
     else: echo fut.error.msg
     client.close()
-    if not serverProcess.running:
-      doAssert false, "Server died."
     await sleepAsync(1000)
 
   doAssert false, "Failed to start server."
@@ -74,8 +64,6 @@ proc allTest(useStdLib: bool) =
   test "doesn't crash on missing script name":
     # If this fails then alltest is likely not running.
     let resp = waitFor client.get(address)
-    checkpoint (waitFor resp.body)
-    checkpoint $resp.code
     check resp.code.is5xx
 
   test "can access root":
@@ -94,7 +82,7 @@ proc allTest(useStdLib: bool) =
     let resp = waitFor client.get(address & "/foo/halt")
     check resp.status.startsWith("502")
     check (waitFor resp.body) == "I'm sorry, this page has been halted."
-
+  
   test "/halt-before":
     let resp = waitFor client.request(address & "/foo/halt-before/something", HttpGet)
     let body = waitFor resp.body
@@ -109,12 +97,12 @@ proc allTest(useStdLib: bool) =
   test "/redirect":
     let resp = waitFor client.request(address & "/foo/redirect/halt", HttpGet)
     check resp.headers["location"] == "http://localhost:5454/foo/halt"
-
+  
   test "/redirect-halt":
     let resp = waitFor client.request(address & "/foo/redirect-halt/halt", HttpGet)
     check resp.headers["location"] == "http://localhost:5454/foo/halt"
     check (waitFor resp.body) == ""
-
+  
   test "/redirect-before":
     let resp = waitFor client.request(address & "/foo/redirect-before/anywhere", HttpGet)
     check resp.headers["location"] == "http://localhost:5454/foo/nowhere"
@@ -165,15 +153,13 @@ proc allTest(useStdLib: bool) =
   suite "static":
     test "index.html":
       let resp = waitFor client.get(address & "/foo/root")
-      let body = waitFor resp.body
-      check body.startsWith("This should be available at /root/.")
+      check (waitFor resp.body) == "This should be available at /root/.\n"
 
     test "test_file.txt":
       let resp = waitFor client.get(address & "/foo/root/test_file.txt")
       check (waitFor resp.body) == "Hello World!"
 
     test "detects attempts to read parent dirs":
-      # curl -v --path-as-is http://127.0.0.1:5454/foo/../public2/should_be_inaccessible
       let resp = waitFor client.get(address & "/foo/root/../../tester.nim")
       check resp.code == Http400
       let resp2 = waitFor client.get(address & "/foo/root/..%2f../tester.nim")
