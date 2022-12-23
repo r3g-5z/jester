@@ -13,7 +13,7 @@ skipDirs = @["tests"]
 requires "nim >= 1.0.0"
 
 when not defined(windows):
-  requires "httpbeast >= 0.3.0"
+  requires "https://github.com/r3g-5z/httpbeast#0f7b07f"
 
 # For tests
 requires "https://github.com/timotheecour/asynctools#pr_fix_compilation"
